@@ -1,2 +1,2 @@
 # WoS_wordsearch_cryopres
-Identifying articles related to cryopreservation and micropropagation, and the families and genera studied
+Identifying articles related to cryopreservation and micropropagation, and the families and genera studied in these articles
