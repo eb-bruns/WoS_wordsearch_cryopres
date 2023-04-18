@@ -37,7 +37,8 @@
 
 # this code chunk is from Shannon M. Still
 # rm(list=ls())
-my.packages <- c('tidyverse','textclean','data.table','rebus','readxl','arsenal')
+my.packages <- c('tidyverse','textclean','data.table','rebus','readxl',
+                 'arsenal','countrycode')
 lapply(my.packages, require, character.only=TRUE)
 #  install.packages(my.packages) #Turn on to install current versions
 
@@ -161,8 +162,10 @@ all_data_raw <- all_data_raw[,-remove]
 
 # rename some key columns to remove spaces in the names (not allowed in R)
 setnames(all_data_raw,
-  old = c("Article Title","Abstract","UT (Unique WOS ID)","Publication Year"),
-  new = c("title_orig","abstract_orig","uid","publication_year"))
+  old = c("Article Title","Abstract","UT (Unique WOS ID)",
+          "Publication Year","Publisher Address","Addresses"),
+  new = c("title_orig","abstract_orig","uid",
+          "publication_year","publisher_address","addresses"))
 
 # remove duplicate articles
 all_data <- all_data_raw %>%
@@ -173,8 +176,9 @@ nrow(all_data) #22251
 
 # keep only necessary columns (can add rest back in at end)
 all_data <- all_data %>%
-  select(uid,title_orig,abstract_orig,filename,publication_year)
-head(all_data)
+  select(uid,title_orig,abstract_orig,filename,publication_year,
+         publisher_address,addresses)
+head(as.data.frame(all_data))
 
 # add space at beginning and end of title, for matching genus names later
 all_data$title_orig <- paste0(" ",all_data$title_orig," ")
@@ -557,6 +561,95 @@ all_data$excep_sp <- unlist(t3)
 # take a look
 head(as.data.frame(all_data))
 
+##
+### SEARCH FOR PUBLICATION & AUTHOR COUNTRIES
+##
+
+# use countrycode package to search for and standardize country names
+#   from the publisher & author address columns; add to main df
+  ## publisher addresses
+  # search for countries
+t <- as.data.frame(countryname(all_data$publisher_address))
+colnames(t)[1] <- "publisher_country"
+all_data <- cbind(all_data,t)
+  # assign countries for those that are ambiguous (may need to add more)
+all_data[grep("ENGLAND|SCOTLAND|WALES", 
+              all_data$publisher_address),]$publisher_country <- "United Kingdom"
+  # assign US based on state and zip, when doesn't say US
+all_data[grep(", [A-Z][A-Z] [0-9][0-9][0-9][0-9][0-9]$", 
+              all_data$publisher_address),]$publisher_country <- "US"
+  ## author addresses
+  # need to separate out each address, search for country, then combine
+    # first determine which separator to use (there seem to be two common ones)
+    sep1 <- all_data[grep("\\[",all_data$addresses),]; nrow(sep1)
+    # remove first character so we don't get a blank column first
+    sep1$addresses <- sub('.', '', sep1$addresses)
+    # now separate
+    sep1 <- sep1 %>% 
+      select(addresses,uid) %>%
+      separate(addresses, 
+               into = c("a1","a2","a3","a4","a5","a6","a7","a8","a9","a10","a11",
+                        "a12","a13","a14","a15","a16","a17","a18","a19","a20",
+                        "a21","a22","a23","a24","a25","a26","a27","a28","a29",
+                        "a30","a31","a32","a33","a34","a35","a36","a37","a38",
+                        "a39","a40","a41","a42","a43","a44","a45"), 
+               sep = "\\[") %>%
+      replace(is.na(.), "None")
+    sep2 <- all_data[which(!(all_data$uid %in% unique(sep1$uid))),]; nrow(sep2)
+    sep2 <- sep2 %>% 
+      select(addresses,uid) %>%
+      separate(addresses, 
+               into = c("a1","a2","a3","a4","a5","a6","a7","a8","a9","a10","a11",
+                        "a12","a13","a14","a15","a16","a17","a18","a19","a20",
+                        "a21","a22","a23","a24","a25","a26","a27","a28","a29",
+                        "a30","a31","a32","a33","a34","a35","a36","a37","a38",
+                        "a39","a40","a41","a42","a43","a44","a45"), 
+               sep = ";") %>%
+      replace(is.na(.), "None")
+  sep_t <- as.data.frame(rbind(sep1,sep2))
+  # search for countries
+t <- data.frame(uid = all_data$uid)
+for(i in 1:(ncol(sep_t)-1)){
+  # get column to work with now
+  piece_now <- as.data.frame(sep_t)[,c(46,i)]
+  # find country name in that column
+  t2 <- as.data.frame(countryname(piece_now[,2]))
+  t2 <- cbind(piece_now, t2)
+  colnames(t2)[3] <- paste0("c",i)
+    # assign country for common issues
+    t2[grep("ENGLAND|SCOTLAND|WALES",t2[,2],ignore.case=T),3] <- "United Kingdom"
+    t2[grep("South Korea",t2[,2],ignore.case=T),3] <- "South Korea"
+    t2[grep("Peoples R China",t2[,2],ignore.case=T),3] <- "China"
+    likely_us <- grep("[,| ][A-Z][A-Z] [0-9][0-9][0-9][0-9][0-9]", t2[,2])
+    no_ctry <- which(is.na(t2[,3]))
+    t2[intersect(likely_us,no_ctry),3] <- "US"
+      # see where there is data but no country was identified
+      no_ctry <- which(is.na(t2[,3]))
+      no_data <- which(t2[,2]=="None")
+      need_manual_edit <- no_ctry[!(no_ctry %in% no_data)]
+      # flag these for a manual look
+      t2[need_manual_edit,3] <- "<CHECK>"
+  # keep only uid and final country assignment
+  t2 <- t2[,c(1,3)]
+  # join to df where we will gather results for all columns
+  t <- left_join(t,t2)
+  print(paste("finished",i))
+}
+  # now combine all the author countries across each row and remove duplicates
+auth_ctrys <- t %>%
+  rowwise %>%
+  mutate(author_countries = toString(unique(na.omit(c_across(2:46))))) %>%
+  ungroup
+auth_ctrys <- auth_ctrys[,c(1,47)]; head(auth_ctrys)
+  # append to main df
+all_data <- left_join(all_data,auth_ctrys)
+
+# save to add to old version, if doing after-the-fact
+add <- all_data[,c("uid",
+                   "publisher_address","publisher_country",
+                   "addresses","author_countries")]
+write.csv(add,file.path(main_dir,"add_countries_invitro.csv"), row.names=F)
+
 ###############################################################################
 ## Export results
 ###############################################################################
@@ -564,6 +657,7 @@ head(as.data.frame(all_data))
 # select and order columns
 data_sel <- all_data %>%
   select(uid,filename,publication_year,
+         publisher_country,#author_countries,
          title_orig,abstract_orig,
          title_l_rep,abstract_l_rep,
          genera,
