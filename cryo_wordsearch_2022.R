@@ -38,8 +38,7 @@
 
 # this code chunk is from Shannon M. Still
 # rm(list=ls())
-my.packages <- c('plyr','tidyverse','textclean','data.table','rebus','readxl',
-  'stringr')
+my.packages <- c('tidyverse','stringr','readxl','textclean','data.table')
 lapply(my.packages, require, character.only=TRUE)
 #  install.packages(my.packages) #Turn on to install current versions
 
@@ -97,7 +96,7 @@ freq.table <- function(target.col){
 ##############
 
 # working directory
-main_dir <- "/Volumes/GoogleDrive-103729429307302508433/My Drive/Micropropagation Downloads/For_R_analysis"
+main_dir <- "/Users/emily/Library/CloudStorage/GoogleDrive-ebeckman@mortonarb.org/.shortcut-targets-by-id/1_chgTVGeSxYq_-Ce7LYz4zrZxIMSdyzi/Micropropagation Downloads/Cryo InVitro Wordsearch Project - Beckman Bruns/For_R_analysis"
 
 # folder with raw WOS exports (.xlsx files)
 data_folder <- "Cryo_2022"
@@ -260,6 +259,12 @@ length(excep_list) #863 (775 without synonyms)
 
 # create pattern then search for genera in title and abstract text
 
+# note that the current workflow is slow and heavy - could be streamlined by
+#   adding iterations for each pattern search. right now we look for all 
+#   keywords (family, genus, etc.) at the same time in one giant expression. 
+#   each keywork could instead be searched for individually in an interative
+#   process
+
 ## --- IN TITLE --- ##
 
 # PATTERN 1: genus name with non-alpha character before and after,
@@ -268,7 +273,7 @@ gen_list1 <- gen_list
 gen_list1[1] <- paste0("[^a-zA-Z]",gen_list1[1])
 gen_list1[length(gen_list1)] <- paste0(gen_list1[length(gen_list1)],"[^a-zA-Z]")
 gen_pat1 <- paste(gen_list1,collapse="[^a-zA-Z]|[^a-zA-Z]")
-  # view test matches
+  # view test matches; you can use this for each pattern, as desired
 str_view_all(data_ex$title_orig, pattern = gen_pat1, match = T)
   # get matches
 all_data$genera <- find.all.matches(all_data$title_orig,gen_pat1)
@@ -427,6 +432,8 @@ keywords <- read.csv(file.path(main_dir,
   "Keyword searches - focus_check.csv"), colClasses = "character")
 search <- str_squish(keywords[,1])
 main_category <- str_squish(keywords[,2])
+  # note that the "[^a-rt-zA-RT-Z]" expression allows for "s" to be matched;
+  #  this means we can find plural versions of some keywords
 key_search <- paste0(search, collapse="[^a-rt-zA-RT-Z]|[^a-zA-Z]")
 key_search <- paste0("[^a-zA-Z]",key_search,"[^a-rt-zA-RT-Z]")
 
@@ -828,7 +835,6 @@ length(which(
 length(which(
   (unique(excep$WFO.family) %in% unique(cy_fam$sep_items))==FALSE)) #37
 
-
 ##
 ### NON-SEED COUNTS
 ##
@@ -896,8 +902,24 @@ for(i in 1:length(categories)){
 ### FABACEAE
 ##
 
+wfo_fab_acc_sp <- wfo_all %>%
+  filter(family == "Fabaceae") %>%
+  #filter(genus == "Marmaroxylon")
+  filter(taxonomicStatus == "ACCEPTED" | taxonomicStatus == "UNCHECKED") %>%
+  filter(taxonRank == "SPECIES") %>%
+  distinct(scientificName,genus) %>%
+  group_by(genus) %>%
+  count()
+as.data.frame(wfo_fab_acc_sp)
 
-
+wfo_fab_sp <- wfo_all %>%
+  filter(family == "Fabaceae") %>%
+  filter(taxonRank == "SPECIES") %>%
+  distinct(scientificName,genus,taxonomicStatus) %>%
+  group_by(genus) %>%
+  count(taxonomicStatus) %>%
+  pivot_wider(names_from = taxonomicStatus, values_from = n)
+as.data.frame(wfo_fab_sp)
 
 ##
 ### GENERA IN COMMON IN TARGET CRYO FAMILIES
@@ -927,8 +949,6 @@ for(i in 1:length(search_fam)){
   print(comm)
 }
 
-
-
 ##
 ### CRYO FAMILIES FOR TOP EXCEP SPP
 ##
@@ -942,59 +962,3 @@ for(i in 1:length(search_fam)){
   print(nrow(ls))
 }
 
-
-
-
-
-
-
-
-
-
-wfo_fab_acc_sp <- wfo_all %>%
-  filter(family == "Fabaceae") %>%
-  #filter(genus == "Marmaroxylon")
-  filter(taxonomicStatus == "ACCEPTED" | taxonomicStatus == "UNCHECKED") %>%
-  filter(taxonRank == "SPECIES") %>%
-  distinct(scientificName,genus) %>%
-  group_by(genus) %>%
-  count()
-as.data.frame(wfo_fab_acc_sp)
-
-
-wfo_fab_sp <- wfo_all %>%
-  filter(family == "Fabaceae") %>%
-  filter(taxonRank == "SPECIES") %>%
-  distinct(scientificName,genus,taxonomicStatus) %>%
-  group_by(genus) %>%
-  count(taxonomicStatus) %>%
-  pivot_wider(names_from = taxonomicStatus, values_from = n)
-as.data.frame(wfo_fab_sp)
-
-
-
-
-
-
-
-
-
-
-
-# THE PLANT LIST (TPL)
-
-# read in TPL genera and families
-  # pulled from this list:
-  #   http://www.theplantlist.org/1.1/browse/-/-/
-  #   and formatted into CSV document with col for genus and col for family
-  # read in table
-tpl_gen <- read.csv(file.path(main_dir,"TPL_genera_families_Mar2021.csv"),
-  colClasses = "character")
-str(tpl_gen)
-# replace family name with non-ascii character
-tpl_gen$family[which(tpl_gen$family == "Isoëtaceae")] <- "Isoetaceae"
-
-# MERGE WFO AND TPL
-
-# join WFO and TPL genera and families
-gen_fam <- full_join(wfo_gen,tpl_gen); nrow(gen_fam) #41308
