@@ -37,8 +37,8 @@
 
 # this code chunk is from Shannon M. Still
 # rm(list=ls())
-my.packages <- c('tidyverse','textclean','data.table','rebus','readxl',
-                 'arsenal','countrycode')
+my.packages <- c('tidyverse','stringr','readxl','textclean','data.table',
+                 'countrycode') #,'arsenal'
 lapply(my.packages, require, character.only=TRUE)
 #  install.packages(my.packages) #Turn on to install current versions
 
@@ -100,7 +100,9 @@ find.all.matches.nospace <- function(search.col,pat){
   return(found.col)
 }
 
-freq.table <- function(target.col){
+# function for calculating total frequency (e.g. for genera), for columns
+#   with multiple items in each cell; used in final stats section
+freq.table <- function(target.col,data_col,freq_col){
 	# see max number of items (genera/families/etc.) for one record
 	see_max <- sapply(target.col,function(x) str_count(x, pattern = ", "))
 	# create array of separated items
@@ -109,9 +111,13 @@ freq.table <- function(target.col){
 	count_freq <- as.data.frame(table(sep_items))
 	count_freq <- count_freq[-1,]
   count_freq <- count_freq %>% dplyr::arrange(desc(Freq))
+  # add sequential number column, for joining and exporting later
+  count_freq$order <- 1:nrow(count_freq)
+  count_freq <- count_freq %>% select(order,sep_items,Freq)
+  # change column names to be more meaningful
+  setnames(count_freq, old = c("sep_items","Freq"), new = c(data_col,freq_col))
 	return(count_freq)
 }
-
 
 
 
@@ -235,10 +241,9 @@ wfo_gen <- wfo_all %>% distinct(genus,.keep_all=T) %>%
   filter(genus != "") %>% dplyr::select(family,genus)
 str(wfo_gen)
 rm(wfo_all)
-# replace non-standard family name
 unique(wfo_gen$genus); nrow(wfo_gen) #37112 (v.2019.05 is 35856)
 unique(wfo_gen$family)
-# for v.2019.05
+# for v.2019.05 -- replace non-standard family name
 #wfo_gen$family[which(wfo_gen$family == "FRANCOACEAE ")] <- "Francoaceae"
 
 # LIST OF GENERA
@@ -253,7 +258,7 @@ gen_list <- gen_list[which(gen_list != "Medium" &
                            gen_list != "Aa" &
                            gen_list != "Ion" &
                            gen_list != "Cuba" &
-                           # to add if running again:
+                           # to add if running again (fixed by hand this time):
                            gen_list != "Basal" &
                            gen_list != "Laser" &
                            gen_list != "Panda" &
@@ -292,6 +297,12 @@ length(excep_list) #863 (775 without synonyms)
 ##
 
 # create pattern then search for genera in title and abstract text
+
+# note that the current workflow is slow and heavy - could be streamlined by
+#   adding iterations for each pattern search. right now we look for all 
+#   keywords (family, genus, etc.) at the same time in one giant expression. 
+#   each keywork could instead be searched for individually in an interative
+#   process
 
 ## --- IN TITLE --- ##
 
@@ -464,6 +475,8 @@ keywords <- read.csv(file.path(main_dir,
   "Keyword searches - focus_check.csv"), colClasses = "character")
 search <- str_squish(keywords[,1])
 main_category <- str_squish(keywords[,2])
+  # note that the "[^a-rt-zA-RT-Z]" expression allows for "s" to be matched;
+  #  this means we can find plural versions of some keywords
 key_search <- paste0(search, collapse="[^a-rt-zA-RT-Z]|[^a-zA-Z]")
 key_search <- paste0("[^a-zA-Z]",key_search,"[^a-rt-zA-RT-Z]")
 
@@ -751,94 +764,55 @@ write.csv(data_edited,file.path(main_dir,
   paste0("invitro_wordsearch_matches_", Sys.Date(), ".csv")), row.names=F)
 
 
+### !!!
+### NOW REVIEW AND EDIT THE DATA MANUALLY AS DESIRED
+###  we did this in Google Sheets / Excel
+### !!!
 
-### NOT UPDATED YET...
 
 ###############################################################################
-## Calculate stats
+###############################################################################
+## Calculate stats...
+
+###############################################################################
+# Frequency stats
 ###############################################################################
 
-# read in data
+# read in manually-edited data
 all_data_edited <- read.csv(file.path(main_dir,
-  "cryo_wordsearch_matches_2022-03-23 - For R.csv"), colClasses = "character")
-# recode a couple manual mistakes
+  "POST-MANUAL-EDITS_invitro_wordsearch_matches_2023-03-17_FOR-R.csv"), 
+  colClasses = "character")
+# recode a couple manual mistakes (not strictly necessary; just curious)
 unique(all_data_edited$flag)
 unique(all_data_edited$key_category)
-unique(all_data_edited$cryo_category)
-freq.table(cryo$cryo_category)
 all_data_edited <- all_data_edited %>%
   mutate(flag = recode(flag,
-    "NON_Capture: Review/rec" = "NON_CAPTURE: Review/rec",
-    "NON_CAPTURE: Not Plant" = "NON_CAPTURE: Not plant",
-    "NON_CAPTURE: Fungi" = "NONSEED: Fungi")) %>%
+                       "NO GENUS/FAMILY" = "NO GENUS/FAMILY FOUND")) %>%
   mutate(key_category = recode(key_category,
-    "Cryo " = "Cryo",
-    "Cryo-DT" = "Pre-cry")) %>%
-  mutate(cryo_category = recode(cryo_category,
-    "Embryo " = "Embryo",
-    "Embyro, Seed" = "Embryo, Seed"))
+                               "in Vitro" = "In Vitro"))
 table(all_data_edited$flag)
 table(all_data_edited$key_category)
-nrow(all_data_edited) #3015
-#head(as.data.frame(all_data_edited))
+nrow(all_data_edited) #22253
 
-# in vitro subset
-invitro <- all_data_edited %>%
-  filter(grepl("In Vitro",key_category)==TRUE & flag == "")
-nrow(invitro) #1682
-
-# cryo subset
-cryo <- all_data_edited %>%
-  filter(grepl("Cryo",key_category)==TRUE & flag == "")
-nrow(cryo) #1798
-
-##
-### GENUS COUNTS
-##
-
-# takes into account all genera found in various searches
-
-  # in vitro
-iv_gen <- freq.table(invitro$genera)
-iv_gen <- iv_gen %>%
-  rename(InVitro_freq = Freq)
-head(iv_gen,n=20)
-
-  # cryo
-cy_gen <- freq.table(cryo$genera)
-cy_gen <- cy_gen %>%
-  rename(Cryo_freq = Freq)
-head(cy_gen,n=20)
-
-  # add both next to each other for saving
-top_genera <- full_join(iv_gen,cy_gen)
-top_genera$InVitro_freq[which(is.na(top_genera$InVitro_freq))] <- 0
-top_genera$Cryo_freq[which(is.na(top_genera$Cryo_freq))] <- 0
-top_genera
+# subset of records to use for analyses (not flagged)
+invitro <- all_data_edited %>% filter(flag == "")
+nrow(invitro) #18935
 
 ##
 ### FAMILY COUNTS
 ##
 
 # takes into account all the families found in various searches
+iv_fam <- freq.table(invitro$families,"families","fam_freq")
+head(iv_fam,n=25)
 
-  # in vitro
-iv_fam <- freq.table(invitro$families)
-iv_fam <- iv_fam %>%
-  rename(InVitro_freq = Freq)
-head(iv_fam,n=20)
+##
+### GENUS COUNTS
+##
 
-  # cryo
-cy_fam <- freq.table(cryo$families)
-cy_fam <- cy_fam %>%
-  rename(Cryo_freq = Freq)
-head(cy_fam,n=20)
-
-  # add both next to each other for saving
-top_families <- full_join(iv_fam,cy_fam)
-top_families$InVitro_freq[which(is.na(top_families$InVitro_freq))] <- 0
-top_families$Cryo_freq[which(is.na(top_families$Cryo_freq))] <- 0
-top_families
+# takes into account all genera found in various searches
+iv_gen <- freq.table(invitro$genera,"genera","gen_freq")
+head(iv_gen,n=25)
 
 ##
 ### EXCEPTIONAL SPECIES COUNTS
@@ -848,141 +822,164 @@ top_families
 excep_status <- read.csv(file.path(main_dir,
   "Exceptional Status List - No Justification.csv"), colClasses = "character")
 
-  # in vitro
-iv_excep <- freq.table(invitro$excep_sp)
-iv_excep <- iv_excep %>%
-  rename(InVitro_freq = Freq)
-head(iv_excep,n=20)
-iv_excep
-iv_genus <- unlist(lapply(str_split(iv_excep$sep_items," "),"[[",1))
-iv_genera <- as.data.frame(table(iv_genus))
-iv_genera
+# get frequency of exceptional species found in titles & abstracts
+iv_excep <- freq.table(invitro$excep_sp,"excep_sp","excep_freq")
+head(iv_excep,n=25)
 
-  # cryo
-cy_excep <- freq.table(cryo$excep_sp)
-cy_excep <- cy_excep %>%
-  rename(Cryo_freq = Freq)
-head(cy_excep,n=20)
-cy_excep
-cy_genus <- unlist(lapply(str_split(cy_excep$sep_items," "),"[[",1))
-cy_genera <- as.data.frame(table(cy_genus))
-cy_genera
-  # check number of species in specific family
-excep_status %>% filter(WFO.family == "Passifloraceae") %>% select(Species.name)
+# number of exceptional species in each family
+excep_fam <- as.data.frame(table(excep_status$WFO.family))
+colnames(excep_fam) <- c("excep_fam","excep_sp_fam")
+t <- head(excep_fam %>% arrange(desc(excep_sp_fam)), n=25); t
+top_excep_fam <- as.character(t[,1])
 
-  # add both next to each other for saving
-top_excep_sp <- full_join(iv_excep,cy_excep)
-top_excep_sp$InVitro_freq[which(is.na(top_excep_sp$InVitro_freq))] <- 0
-top_excep_sp$Cryo_freq[which(is.na(top_excep_sp$Cryo_freq))] <- 0
-top_excep_sp
+# number of exceptional species in each genus
+excep_gen <- as.data.frame(table(excep_status$WFO.genus))
+colnames(excep_gen) <- c("excep_gen","excep_sp_gen"); head(excep_gen)
+t <- head(excep_gen %>% arrange(desc(excep_sp_gen)), n=25); t
+top_excep_gen <- as.character(t[,1])
 
-# exceptional species genera
-top_excep_sp$genus <- unlist(lapply(str_split(top_excep_sp$sep_items," "),"[[",1))
-excep_genera <- as.data.frame(table(top_excep_sp$genus))
-
-# compare families
-excep <- excep_status %>% filter(Exceptional.status == "Exceptional")
-length(unique(excep$WFO.family)) #111
-length(unique(cy_fam$sep_items)) #128
-length(which(
-  (unique(cy_fam$sep_items) %in% unique(excep$WFO.family))==TRUE)) #111
-length(which(
-  (unique(cy_fam$sep_items) %in% unique(excep$WFO.family))==FALSE)) #74
-length(which(
-  (unique(excep$WFO.family) %in% unique(cy_fam$sep_items))==FALSE)) #37
-
+# not sure we used these? commenting out for now...
+  # get frequency of exceptional genera found in titles & abstracts
+#iv_genus <- unlist(lapply(str_split(iv_excep$sep_items," "),"[[",1))
+#iv_genera <- as.data.frame(table(iv_genus))
+#iv_genera
+  # exceptional species genera
+#top_excep_sp$genus <- unlist(lapply(str_split(top_excep_sp$sep_items," "),"[[",1))
+#excep_genera <- as.data.frame(table(top_excep_sp$genus))
+  # compare families
+#excep <- excep_status %>% filter(Exceptional.status == "Exceptional")
+#length(unique(excep$WFO.family)) #
+#length(unique(cy_fam$sep_items)) #
+#length(which((unique(cy_fam$sep_items) %in% unique(excep$WFO.family))==TRUE)) #111
+#length(which((unique(cy_fam$sep_items) %in% unique(excep$WFO.family))==FALSE)) #74
+#length(which((unique(excep$WFO.family) %in% unique(cy_fam$sep_items))==FALSE)) #37
 
 ##
 ### NON-SEED COUNTS
 ##
 
-# in vitro subset
-invitro_ns <- all_data_edited %>%
-  filter(grepl("In Vitro",key_category)==TRUE &
-         (flag == "NONSEED"))
-nrow(invitro_ns) #146
-# freq
-iv_nseed <- table(invitro_ns$nonseed_capture)
-iv_nseed
+# create subset of records flagged as non-seed
+nonseed <- all_data_edited %>% filter(flag == "NONSEED")
+nrow(nonseed) #182
 
-# cryo subset
-cryo_ns <- all_data_edited %>%
-  filter(grepl("Cryo",key_category)==TRUE &
-        (grepl("NONSEED",flag)==TRUE))
-nrow(cryo_ns) #77
-# freq
-table(cryo_ns$flag)
-# genera and families found for bryophytes
-unique(cryo_ns[which(grepl("Bryophyte",cryo_ns$flag)),]$genera)
-unique(cryo_ns[which(grepl("Bryophyte",cryo_ns$flag)),]$families)
-# genera and families found for pteridophytes
-unique(cryo_ns[which(grepl("Pteridophyte",cryo_ns$flag)),]$genera)
-unique(cryo_ns[which(grepl("Pteridophyte",cryo_ns$flag)),]$families)
+# calculate frequency of each type
+ns_type <- table(nonseed$nonseed_capture)
+ns_type
 
-  # add both next to each other for saving
-nseed <- cbind(iv_nseed,cy_nseed)
-nseed
+# genera and families found in each category
+  # bryophytes
+ns_bryo <- nonseed[which(nonseed$nonseed_capture == "bryophyte"),]
+bryo_gen <- freq.table(ns_bryo$genera,"bryo_gen","bryo_gen_freq"); bryo_gen
+bryo_fam <- freq.table(ns_bryo$families,"bryo_fam","bryo_fam_freq"); bryo_fam
+  # pteridophytes
+ns_pteri <- nonseed[which(nonseed$nonseed_capture == "pteridophyte"),]
+pteri_gen <- freq.table(ns_pteri$genera,"pteri_gen","pteri_gen_freq"); pteri_gen
+pteri_fam <- freq.table(ns_pteri$families,"pteri_fam","pteri_fam_freq"); pteri_fam
+  # algae
+ns_algae <- nonseed[which(nonseed$nonseed_capture == "algae"),]
+algae_gen <- freq.table(ns_algae$genera,"algae_gen","algae_gen_freq"); algae_gen
+algae_fam <- freq.table(ns_algae$families,"algae_fam","algae_fam_freq"); algae_fam
 
 ##
-### CRYO CATEGORY COUNTS
+### PASTE ALL RESULTS TOGETHER THEN EXPORT
 ##
 
-# freq
-cy_catfreq <- freq.table(cryo$cryo_category)
-cy_catfreq
+# data to paste together
+results_dfs <- list(iv_fam,iv_gen,iv_excep,
+                    bryo_fam,bryo_gen,pteri_fam,pteri_gen,algae_fam,algae_gen)
+# paste all side-by-side
+all_results <- Reduce(function(x, y) full_join(x, y, by = "order"), 
+                      results_dfs)
+# replace NA with "" for easier viewing
+all_results[is.na(all_results)] <- ""
 
-# by family
-  # create dataframe with duplicate row for each cryo_category listed
-cryo_catsep <- cryo %>%
-  mutate(cryo_category = strsplit(as.character(cryo_category), ", ")) %>%
-  unnest(cryo_category)
-str(cryo_catsep)
-categories <- unique(cryo_catsep$cryo_category)
-  # loop through and print family frequency for each cryo category
-for(i in 1:length(categories)){
-  sel <- cryo_catsep %>% filter(cryo_category == categories[i])
-  sel_fam <- unlist(lapply(str_split(sel$families,", "),"[[",1))
-  print(categories[i])
-  print(as.data.frame(table(sel_fam)))
-}
+head(all_results)
+tail(all_results)
 
-# by genus
-  # loop through and print genus frequency for each cryo category
-for(i in 1:length(categories)){
-  sel <- cryo_catsep %>% filter(cryo_category == categories[i])
-  sel_gen <- unlist(lapply(str_split(sel$genera,", "),"[[",1))
-  print(categories[i])
-  print(as.data.frame(table(sel_gen)))
-}
+# write file
+write.csv(all_results,
+          file.path(main_dir,paste0("invitro_wordsearch_stats_", 
+                                    Sys.Date(), ".csv")), row.names=F)
+
+###############################################################################
+# Other stats
+###############################################################################
 
 ##
-### FABACEAE
+### PERCENT TREES BY GENUS
 ##
 
+# read in World Flora Online backbone
+wfo_all <- read.delim(file.path(main_dir,"WFO_Backbone",
+                                # replace the version number as needed:
+                                "v.2021.01","classification.txt"),
+                      colClasses = "character")
+# summarize to get number of species in each genus
+wfo_sel <- wfo_all %>%
+  filter(taxonRank == "SPECIES" & 
+         (taxonomicStatus == "ACCEPTED" | taxonomicStatus == "UNCHECKED")) %>%
+  count(genus)
 
+# read in GlobalTreeSearch data (CSV file of all tree taxa in the database)
+gts <- read.csv(file.path(main_dir,"global_tree_search_trees_1_6.csv"), 
+                colClasses = "character")
+# summarize to get number of species in each genus
+gts_gen <- gts %>% 
+  separate(TaxonName, into = c("genus","species"), sep = " ") %>%
+  count(genus)
 
+# calculate % trees for top genera in lit review and exceptional species list
+  # top 25 lit review genera
+litgen_25 <- as.data.frame(as.character(iv_gen[1:25,2]))
+colnames(litgen_25) <- "genus"
+litgen_25 <- left_join(litgen_25,wfo_sel,by="genus")
+litgen_25 <- left_join(litgen_25,gts_gen,by="genus")
+litgen_25[which(is.na(litgen_25$n.y)),]$n.y <- 0
+litgen_25$trees <- litgen_25$n.y / litgen_25$n.x
+litgen_25
+  # top 25 exceptional genera
+excgen_25 <- as.data.frame(c("Shorea","Cyanea","Quercus","Artocarpus","Melicope",
+                           "Coprosma","Lysimachia","Dipterocarpus","Citrus",
+                           "Cyrtandra","Pittosporum","Araucaria","Hopea","Inga",
+                           "Syzygium","Clermontia","Aesculus","Garcinia",
+                           "Bruguiera","Coffea","Diospyros","Rhizophora",
+                           "Trichilia"))
+colnames(excgen_25) <- "genus"
+excgen_25 <- left_join(excgen_25,wfo_sel)
+excgen_25 <- left_join(excgen_25,gts_gen,by="genus")
+excgen_25[which(is.na(excgen_25$n.y)),]$n.y <- 0
+excgen_25$trees <- excgen_25$n.y / excgen_25$n.x
+excgen_25
 
 ##
-### GENERA IN COMMON IN TARGET CRYO FAMILIES
+### GENERA IN COMMON IN TARGET FAMILIES
 ##
+
+# keep just genus and family columns in WFO dataset
+wfo_gen <- wfo_all %>% distinct(genus,.keep_all=T) %>%
+  filter(genus != "") %>% dplyr::select(family,genus)
 
 # create list of genera found in lit search and match the family from WFO
-all_gen_found <- unique(unlist(str_split(cryo$genera,", ")))
+all_gen_found <- unique(unlist(str_split(invitro$genera,", ")))
 all_gen_df <- data.frame(genus = all_gen_found)
 gen_fam_found <- left_join(all_gen_df,wfo_gen)
 
 # list of families you want to search for
-search_fam <- c("Arecaceae","Fabaceae","Orchidaceae","Rutaceae")
+search_fam <- c("Arecaceae","Asteraceae","Fabaceae","Orchidaceae","Rutaceae")
 
 # loop through each family to get stats
 for(i in 1:length(search_fam)){
   # print current family name
   print(paste0("Family: ",search_fam[i]))
   # Exceptional species genera
-  ex <- excep_status %>% filter(WFO.family == search_fam[i]) %>% select(WFO.genus) %>% distinct(WFO.genus)
+  ex <- excep_status %>% 
+    filter(WFO.family == search_fam[i] & Exceptional.status == "Exceptional") %>% 
+    select(WFO.genus) %>% distinct(WFO.genus)
   print(paste0("Num Exceptional Species genera in target family: ",nrow(ex)))
   # Lit search genera
-  ls <- gen_fam_found %>% filter(family == search_fam[i]) %>% select(genus) %>% distinct(genus)
+  ls <- gen_fam_found %>% 
+    filter(family == search_fam[i]) %>% 
+    select(genus) %>% distinct(genus)
   print(paste0("Num Literature Search genera in target family: ",nrow(ls)))
   # in common
   comm <- ex$WFO.genus[which(ex$WFO.genus %in% ls$genus)]
@@ -990,6 +987,200 @@ for(i in 1:length(search_fam)){
   print(comm)
 }
 
+##
+### PUBLISHER AND AUTHOR COUNTRIES FOR TOP EXCEPTIONAL FAMILIES/GENERA
+##
+
+# get publisher/author country frequency data for target families/genera
+ctry.freq <- function(top_list,top_list_colnum,target_freq_colnum){
+  # create blank dataframes we will fill in the loop below
+  top <- setNames(data.frame(matrix(ncol = 3, nrow = 0)), c("Var1", "Freq", "category"))
+  # loop through each family/genus to get countries and frequency for each
+  for(i in 1:length(top_list)){
+    temp <- as.data.frame(table(invitro[which(grepl(
+      top_list[i],invitro[,top_list_colnum])),target_freq_colnum]))
+    # when no countries, create manually
+    if(nrow(temp) == 0){ 
+      temp <- data.frame(Var1 = "None", Freq = 0)
+    }
+    # if more than once country in a cell, we need to split again and sum
+    if("TRUE" %in% as.character(grepl(",",temp$Var1))){ 
+      # split by comma, aggregate by country, and sum number of articles
+      temp <- temp %>% 
+        separate_rows(Var1, sep = ", ") %>%
+        aggregate(Freq ~ Var1, sum)
+    }
+    temp$Var1 <- as.character(temp$Var1)
+    temp$Var1[which(temp$Var1 == "N/A")] <- "None"
+    temp$category <- top_list[i]
+    top <- rbind(top,temp)
+  }
+  # reshape from long into a wide format
+  top_sum <-reshape(top, idvar = "category", timevar = "Var1", direction = "wide")
+  # replace prefixes in column names
+  colnames(top_sum) <- gsub(x = colnames(top_sum),
+                            pattern = "Freq\\.", replacement = "")
+  # replace NA with 0
+  top_sum[is.na(top_sum)] <- 0
+  # transpose
+  top_sum_t <- data.table::transpose(top_sum,make.names="category")
+  rownames(top_sum_t) <- colnames(top_sum)[2:length(colnames(top_sum))]
+  # add sum column & sort high to low
+  ROW_SUM <- rowSums(top_sum_t); top_sum_t <- cbind(ROW_SUM,top_sum_t)
+  top_sum_t <- top_sum_t %>% arrange(desc(ROW_SUM))
+  return(as.data.frame(top_sum_t))
+}
+
+## publisher country
+top_excep_fam_pubctry <- ctry.freq(top_excep_fam,11,6)
+  write.csv(top_excep_fam_pubctry,file.path(main_dir,"invitro_top_excep_fam_pubctry.csv"))
+top_excep_gen_pubctry <- ctry.freq(top_excep_gen,10,6)
+  write.csv(top_excep_gen_pubctry,file.path(main_dir,"invitro_top_excep_gen_pubctry.csv"))
+
+## author countries
+top_excep_fam_authctry <- ctry.freq(top_excep_fam,11,7)
+  write.csv(top_excep_fam_authctry,file.path(main_dir,"invitro_top_excep_fam_authctry.csv"))
+top_excep_gen_authctry <- ctry.freq(top_excep_gen,10,7)
+  write.csv(top_excep_gen_authctry,file.path(main_dir,"invitro_top_excep_gen_authctry.csv"))
+
+##
+### HEATMAP OF PUBLISHER AND AUTHOR COUNTRIES
+##
+
+library(terra)
+library(leaflet)
+library(BAMMtools)
+library(RColorBrewer)
+  
+# read in countries shapefile
+  # https://hub.arcgis.com/datasets/252471276c9941729543be8789e06e12_0?geometry=23.192%2C13.203%2C-13.370%2C79.425
+world_shp <- vect(file.path(main_dir,"UIA_World_Countries_Boundaries/World_Countries__Generalized_.shp"))
+  # make into object that can be mapped in leaflet
+world_shp_sf <- sf::st_as_sf(world_shp)
+
+# function to calculate country richness and join to polygon data
+richness.poly <- function(df,polygons,richness_colnum){
+  # if more than once country in a cell, split first then sum
+  if("TRUE" %in% as.character(grepl(",",df[,richness_colnum]))){ 
+    # see max number of countries for one row
+    count_ctry <- sapply(df[,richness_colnum],function(x) 
+      str_count(x, pattern = ", "))
+    # create array of separated country names
+    COUNTRY <- str_split_fixed(df[,richness_colnum], ", ", n = (max(count_ctry)+1))
+  } else {
+    COUNTRY <- df[,richness_colnum]
+  }
+  # sum to calculate richness
+  richness <- as.data.frame(table(COUNTRY))
+  print(richness)
+  # merge polygons with richness data
+  merged <- merge(polygons,richness)
+  #merged@data$Freq[which(is.na(merged@data$Freq))] <- 0
+  #merged <- merged[merged@data$Freq > 0,]
+  # see countries that didn't match
+  print("Unmatched country names:")
+  print(setdiff(unique(richness$COUNTRY),unique(merged$COUNTRY)))
+  return(merged)
+}
+
+# countries in invitro data that don't have exact match in country shapefile
+# edit manually to match
+unique(world_shp$COUNTRY)
+invitro <- invitro %>%
+  mutate(publisher_country=recode(publisher_country,
+                                  "Czechia"="Czech Republic",
+                                  "Hong Kong"="China",
+                                  "Russia"="Russian Federation",
+                                  "Taiwan"="China",
+                                  "Trinidad & Tobago"="Trinidad and Tobago",
+                                  "Turkey"="Turkiye",
+                                  "US"="United States"))
+invitro$author_countries <- mgsub(invitro$author_countries,
+  c("Bosnia","Brunei","Cote Ivoire","Czechia",
+    "Palestine","Russia","Taiwan","Trinidad & Tobago","Turkey",
+    "US","Yemen Arab Republic"),
+  c("Bosnia and Herzegovina","Brunei Darussalam","Côte d'Ivoire","Czech Republic",
+    "Israel","Russian Federation","China","Trinidad and Tobago","Turkiye",
+    "United States","Yemen"))
+
+# calculate richness for each country
+map_pubctry <- richness.poly(invitro,world_shp,6)
+map_authctry <- richness.poly(invitro,world_shp,7)
+# make into object that can be mapped in leaflet
+map_pubctry <- sf::st_as_sf(map_pubctry)
+map_authctry <- sf::st_as_sf(map_authctry)
+
+# mapping function
+map.countries <- function(countries,pal,legend_text,legend_labels){ 
+  map <- leaflet() %>%
+    addProviderTiles("CartoDB.PositronNoLabels") %>%
+    addPolygons(data = world_shp_sf,
+                color = "grey", weight = 0.5, opacity = 1,
+                fillColor = "white",fillOpacity = 1) %>%
+    addPolygons(data = countries,
+                color = "grey", weight = 1.5, opacity = 1,
+                fillColor = ~pal(countries$Freq),
+                fillOpacity = 1) %>%
+    addLegend(values = countries$Freq,
+              pal = pal, opacity = 1,
+              title = legend_text,
+              labFormat = function(type, cuts, p) {paste0(legend_labels)},
+              position = "bottomleft")
+  return(map)
+}
+
+# create color bins and labels, create color palette, create map
+
+## publisher country
+  # look at data distribution
+hist(map_pubctry$Freq,breaks=90,xlim=c(0,5000),ylim=c(0,40))
+  # see where natural breaks are (Jenks) - can either use these or your own
+getJenksBreaks(map_pubctry$Freq,9) # number is how many breaks you want
+  # change bins and labels manually
+bins <- c(0,50,100,200,300,600,1000,2000,4000,Inf) # natural breaks
+labels <- c("1 - 49","50 - 99","100 - 199","200 - 299","300 - 599","600 - 999",
+            "1000 - 1999","2000 - 3999","4000+")
+bins <- c(0,500,1000,1500,2000,2500,3000,3500,4000,Inf) # even breaks
+labels <- c("1 - 499","500 - 999","1000 - 1499","1500 - 1999","2000 - 2499",
+            "2500 - 2999","3000 - 3499","3500 - 3999","4000+")
+  # see color palette options with display.brewer.all()
+palette_ctry <- colorBin(palette = "RdPu", bins = bins,
+                         domain = map_pubctry$Freq, reverse = F, 
+                         na.color = "white")
+  # legend title
+legend <- paste0("Number of articles","<br/>","published in the country")
+  # create and view map using function above
+map_heat_pubctry <- map.countries(map_pubctry,palette_ctry,legend,labels)
+map_heat_pubctry
+  # save map
+#htmlwidgets::saveWidget(file.path(map_heat_pubctry,"PublisherCountries_map.html"))
+
+## author countries
+hist(map_authctry$Freq,breaks=90,xlim=c(0,3000),ylim=c(0,40))
+getJenksBreaks(map_authctry$Freq,9)
+bins <- c(0,50,100,200,300,500,700,1000,2000,Inf) # natural breaks
+labels <- c("1 - 49","50 - 99","100 - 199","200 - 299","300 - 499","500 - 699",
+            "700 - 999","1000 - 1999","2000+")
+bins <- c(0,250,500,750,1000,1250,1500,1750,2000,Inf) # even breaks
+labels <- c("1 - 249","250 - 499","500 - 749","750 - 999","1000 - 1249",
+            "1250 - 1499","1500 - 1749","1750 - 1999","2000+")
+palette_ctry <- colorBin(palette = "RdPu", bins = bins,
+                         domain = map_pubctry$Freq, reverse = F, 
+                         na.color = "white")
+legend <- paste0("Number of articles with","<br/>","at least one author's","<br/>",
+                 "institution in the country")
+map_heat_authctry <- map.countries(map_authctry,palette_ctry,legend,labels)
+map_heat_authctry
+#htmlwidgets::saveWidget(file.path(map_heat_authctry,"AuthorCountries_map.html"))
+
+
+
+
+
+
+
+
+### HAVEN'T USED THE REST YET....
 
 
 ##
@@ -1005,13 +1196,9 @@ for(i in 1:length(search_fam)){
   print(nrow(ls))
 }
 
-
-
-
-
-
-
-
+##
+### FABACEAE ANALYSIS
+##
 
 
 wfo_fab_acc_sp <- wfo_all %>%
@@ -1023,7 +1210,6 @@ wfo_fab_acc_sp <- wfo_all %>%
   group_by(genus) %>%
   count()
 as.data.frame(wfo_fab_acc_sp)
-
 
 wfo_fab_sp <- wfo_all %>%
   filter(family == "Fabaceae") %>%
