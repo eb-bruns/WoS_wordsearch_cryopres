@@ -1,15 +1,16 @@
 ################################################################################
-
 ### Author: Emily Beckman Bruns
-### Last Update: _______
+### Last Update: 26 July 2023
 
 ### Funding: Institute of Museum and Library Services
-#            grant number _______________________
-#            Awarded to Cincinnati Zoo & Botanical Garden
+#            grant number MG-30-17-0055-17
+#            Awarded to Cincinnati Zoo & Botanical Garden, Valerie Pence
 
 ### DESCRIPTION:
   # Word search analysis of Web of Science data; searching for family, genus,
-  #  and keywords related to in vitro propagation.
+  #   and keywords related to in vitro propagation.
+  # Results published in:
+  #   _______________________
 
 ### INPUTS:
   # Exports from Web of Science (Excel files)
@@ -37,31 +38,56 @@
 
 # this code chunk is from Shannon M. Still
 # rm(list=ls())
-my.packages <- c('tidyverse','stringr','readxl','textclean','data.table',
-                 'countrycode') #,'arsenal'
+my.packages <- c('tidyverse','stringr','readxl','textclean','countrycode','data.table'
+                 # packages used if making heatmaps:
+                 ,'terra','leaflet','BAMMtools','RColorBrewer'
+)
 lapply(my.packages, require, character.only=TRUE)
 #  install.packages(my.packages) #Turn on to install current versions
 
-# package citations
+# package citations...
 
-#Wickham H, Averick M, Bryan J, Chang W, McGowan LD, François R, Grolemund G, Hayes
-#A, Henry L, Hester J, Kuhn M, Pedersen TL, Miller E, Bache SM, Müller K, Ooms J,
-#Robinson D, Seidel DP, Spinu V, Takahashi K, Vaughan D, Wilke C, Woo K, Yutani H
-#(2019). “Welcome to the tidyverse.” _Journal of Open Source Software_, *4*(43),
-#1686. doi:10.21105/joss.01686 <https://doi.org/10.21105/joss.01686>.
+#Wickham H, Averick M, Bryan J, Chang W, McGowan LD, François R,
+#Grolemund G, Hayes A, Henry L, Hester J, Kuhn M, Pedersen TL, Miller
+#E, Bache SM, Müller K, Ooms J, Robinson D, Seidel DP, Spinu V,
+#Takahashi K, Vaughan D, Wilke C, Woo K, Yutani H (2019). “Welcome to
+#the tidyverse.” _Journal of Open Source Software_, *4*(43), 1686.
+#doi:10.21105/joss.01686 <https://doi.org/10.21105/joss.01686>.
 
-#Rinker, T. W. (2018). textclean: Text Cleaning Tools version 0.9.3. Buffalo, New
-#York. https://github.com/trinker/textclean
+#Wickham H (2022). _stringr: Simple, Consistent Wrappers for Common
+#String Operations_. R package version 1.5.0,
+#<https://CRAN.R-project.org/package=stringr>.
 
-#Dowle M, Srinivasan A (2023). _data.table: Extension of `data.frame`_. R package
-#version 1.14.8, <https://CRAN.R-project.org/package=data.table>.
+#Wickham H, Bryan J (2023). _readxl: Read Excel Files_. R package
+#version 1.4.2, <https://CRAN.R-project.org/package=readxl>.
 
-#Cotton R (2017). _rebus: Build Regular Expressions in a Human Readable Way_. R
-#package version 0.1-3, <https://CRAN.R-project.org/package=rebus>.
+#Rinker, T. W. (2018). textclean: Text Cleaning Tools version 0.9.3.
+#Buffalo, New York. https://github.com/trinker/textclean
 
-#Wickham H, Bryan J (2023). _readxl: Read Excel Files_. R package version 1.4.2,
-#<https://CRAN.R-project.org/package=readxl>.
+#Arel-Bundock V, Enevoldsen N, Yetman C (2018). “countrycode: An R
+#package to convert country names and country codes.” _Journal of Open
+#Source Software_, *3*(28), 848.
+#<https://doi.org/10.21105/joss.00848>.
 
+#Dowle M, Srinivasan A (2023). _data.table: Extension
+#of `data.frame`_. R package version 1.14.8,
+#<https://CRAN.R-project.org/package=data.table>.
+
+#Hijmans R (2023). _terra: Spatial Data Analysis_. R package version
+#1.7-29, <https://CRAN.R-project.org/package=terra>.
+
+#Cheng J, Karambelkar B, Xie Y (2023). _leaflet: Create Interactive
+#Web Maps with the JavaScript 'Leaflet' Library_. R package version
+#2.1.2, <https://CRAN.R-project.org/package=leaflet>.
+
+#Rabosky Daniel L, Michael C Grundler, Carlos J Anderson, Pascal O
+#Title, Jeff J Shi, Joseph W Brown, Huateng Huang and Joanna G Larson.
+#2014. BAMMtools: an R package for the analysis of evolutionary
+#dynamics on phylogenetic trees. Methods in Ecology and Evolution
+#5:701-707.
+
+#Neuwirth E (2022). _RColorBrewer: ColorBrewer Palettes_. R package
+#version 1.1-3, <https://CRAN.R-project.org/package=RColorBrewer>.
 
 #################
 ### FUNCTIONS ###
@@ -156,6 +182,17 @@ for(file in seq_along(file_dfs)){
 all_data_raw <- Reduce(dplyr::bind_rows, file_dfs)
 nrow(all_data_raw) #25513
 
+  # save list of all journals, for reference
+  journals <- unique(all_data_raw$"Journal ISO Abbreviation")
+  write.csv(journals,file.path(main_dir,"ListOfJournals_inWoSExports.csv"))
+
+  # see now many records are from each search
+  nrow(all_data_raw[which(grepl("Cryopreservation and Plant",all_data_raw$filename)),]) #2424
+  nrow(all_data_raw[which(grepl("Cryopreservation and Seed",all_data_raw$filename)),]) #1277
+  nrow(all_data_raw[which(grepl("Microprop",all_data_raw$filename)),]) #10519
+  nrow(all_data_raw[which(grepl("SE",all_data_raw$filename)),]) #10256
+  nrow(all_data_raw[which(grepl("Zygotic emb",all_data_raw$filename)),]) #1037
+  
 # remove columns with nothing but NA
 remove <- vector()
 for(i in 1:ncol(all_data_raw)){
@@ -167,11 +204,13 @@ for(i in 1:ncol(all_data_raw)){
 all_data_raw <- all_data_raw[,-remove]
 
 # rename some key columns to remove spaces in the names (not allowed in R)
-setnames(all_data_raw,
-  old = c("Article Title","Abstract","UT (Unique WOS ID)",
-          "Publication Year","Publisher Address","Addresses"),
-  new = c("title_orig","abstract_orig","uid",
-          "publication_year","publisher_address","addresses"))
+all_data_raw <- all_data_raw %>% 
+  rename("title_orig" = "Article Title",
+         "abstract_orig" = "Abstract",
+         "uid" = "UT (Unique WOS ID)",
+         "publication_year" = "Publication Year",
+         "publisher_address" = "Publisher Address",
+         "addresses" = "Addresses")
 
 # remove duplicate articles
 all_data <- all_data_raw %>%
@@ -313,7 +352,7 @@ gen_list1[1] <- paste0("[^a-zA-Z]",gen_list1[1])
 gen_list1[length(gen_list1)] <- paste0(gen_list1[length(gen_list1)],"[^a-zA-Z]")
 gen_pat1 <- paste(gen_list1,collapse="[^a-zA-Z]|[^a-zA-Z]")
   # view test matches
-str_view_all(data_ex$title_orig, pattern = gen_pat1, match = T)
+str_view(data_ex$title_orig, pattern = gen_pat1, match = T)
   # get matches
 all_data$genera <- find.all.matches(all_data$title_orig,gen_pat1)
 try2 <- all_data[which(all_data$genera==""),]; nrow(try2) #10247
@@ -1047,11 +1086,6 @@ top_excep_gen_authctry <- ctry.freq(top_excep_gen,10,7)
 ### HEATMAP OF PUBLISHER AND AUTHOR COUNTRIES
 ##
 
-library(terra)
-library(leaflet)
-library(BAMMtools)
-library(RColorBrewer)
-  
 # read in countries shapefile
   # https://hub.arcgis.com/datasets/252471276c9941729543be8789e06e12_0?geometry=23.192%2C13.203%2C-13.370%2C79.425
 world_shp <- vect(file.path(main_dir,"UIA_World_Countries_Boundaries/World_Countries__Generalized_.shp"))
@@ -1106,9 +1140,15 @@ invitro$author_countries <- mgsub(invitro$author_countries,
 # calculate richness for each country
 map_pubctry <- richness.poly(invitro,world_shp,6)
 map_authctry <- richness.poly(invitro,world_shp,7)
+  # for exceptional species articles only
+  invitro_excep <- invitro[invitro$excep_sp!="",]
+  map_pubctry_excep <- richness.poly(invitro_excep,world_shp,6)
+  map_authctry_excep <- richness.poly(invitro_excep,world_shp,7)
 # make into object that can be mapped in leaflet
 map_pubctry <- sf::st_as_sf(map_pubctry)
 map_authctry <- sf::st_as_sf(map_authctry)
+map_pubctry_excep <- sf::st_as_sf(map_pubctry_excep)
+map_authctry_excep <- sf::st_as_sf(map_authctry_excep)
 
 # mapping function
 map.countries <- function(countries,pal,legend_text,legend_labels){ 
@@ -1118,7 +1158,7 @@ map.countries <- function(countries,pal,legend_text,legend_labels){
                 color = "grey", weight = 0.5, opacity = 1,
                 fillColor = "white",fillOpacity = 1) %>%
     addPolygons(data = countries,
-                color = "grey", weight = 1.5, opacity = 1,
+                color = "grey", weight = 1.7, opacity = 1,
                 fillColor = ~pal(countries$Freq),
                 fillOpacity = 1) %>%
     addLegend(values = countries$Freq,
@@ -1134,6 +1174,7 @@ map.countries <- function(countries,pal,legend_text,legend_labels){
 ## publisher country
   # look at data distribution
 hist(map_pubctry$Freq,breaks=90,xlim=c(0,5000),ylim=c(0,40))
+max(map_pubctry$Freq) #4499
   # see where natural breaks are (Jenks) - can either use these or your own
 getJenksBreaks(map_pubctry$Freq,9) # number is how many breaks you want
   # change bins and labels manually
@@ -1148,7 +1189,8 @@ palette_ctry <- colorBin(palette = "RdPu", bins = bins,
                          domain = map_pubctry$Freq, reverse = F, 
                          na.color = "white")
   # legend title
-legend <- paste0("Number of articles","<br/>","published in the country")
+legend <- paste0("Number of articles","<br/>",
+                 "published in the country")
   # create and view map using function above
 map_heat_pubctry <- map.countries(map_pubctry,palette_ctry,legend,labels)
 map_heat_pubctry
@@ -1157,163 +1199,62 @@ map_heat_pubctry
 
 ## author countries
 hist(map_authctry$Freq,breaks=90,xlim=c(0,3000),ylim=c(0,40))
+max(map_authctry$Freq) #2651
 getJenksBreaks(map_authctry$Freq,9)
-bins <- c(0,50,100,200,300,500,700,1000,2000,Inf) # natural breaks
 labels <- c("1 - 49","50 - 99","100 - 199","200 - 299","300 - 499","500 - 699",
             "700 - 999","1000 - 1999","2000+")
 bins <- c(0,250,500,750,1000,1250,1500,1750,2000,Inf) # even breaks
 labels <- c("1 - 249","250 - 499","500 - 749","750 - 999","1000 - 1249",
             "1250 - 1499","1500 - 1749","1750 - 1999","2000+")
 palette_ctry <- colorBin(palette = "RdPu", bins = bins,
-                         domain = map_pubctry$Freq, reverse = F, 
+                         domain = map_authctry$Freq, reverse = F, 
                          na.color = "white")
-legend <- paste0("Number of articles with","<br/>","at least one author's","<br/>",
+legend <- paste0("Number of articles with","<br/>",
+                 "at least one author's","<br/>",
                  "institution in the country")
 map_heat_authctry <- map.countries(map_authctry,palette_ctry,legend,labels)
 map_heat_authctry
 #htmlwidgets::saveWidget(file.path(map_heat_authctry,"AuthorCountries_map.html"))
 
+## publisher country - EXCEPTIONAL SPECIES
+hist(map_pubctry_excep$Freq,breaks=90,xlim=c(0,400),ylim=c(0,40))
+max(map_pubctry_excep$Freq) #368
+# skipping natural breaks since I don't think we are using
+#getJenksBreaks(map_pubctry$Freq,9) # number is how many breaks you want
+#bins <- c(0,50,100,200,300,600,1000,2000,4000,Inf) # natural breaks
+#labels <- c("1 - 49","50 - 99","100 - 199","200 - 299","300 - 599","600 - 999",
+#            "1000 - 1999","2000 - 3999","4000+")
+bins <- c(0,40,80,120,160,200,240,280,320,Inf) # even breaks
+labels <- c("1 - 39","40 - 79","80 - 119","120 - 159","160 - 199",
+            "200 - 239","240 - 279","280 - 319","320+")
+palette_ctry <- colorBin(palette = "RdPu", bins = bins,
+                         domain = map_pubctry_excep$Freq, reverse = F, 
+                         na.color = "white")
+legend <- paste0("Number of articles","<br/>",
+                 "on exceptional species","<br/>",
+                 "published in the country")
+map_heat_pubctry_excep <- map.countries(map_pubctry_excep,palette_ctry,legend,labels)
+map_heat_pubctry_excep
+#htmlwidgets::saveWidget(file.path(map_heat_pubctry_excep,"PublisherCountriesExceptional_map.html"))
 
-
-
-
-
-
-
-### HAVEN'T USED THE REST YET....
-
-
-##
-### CRYO FAMILIES FOR TOP EXCEP SPP
-##
-
-search_fam <- c("Caricaceae","Rutaceae","Arecaceae","Malvaceae","Fagaceae","Rubiaceae","Arecaceae",
-"Anacardiaceae","Fagaceae","Ebenaceae","Euphorbiaceae","Lauraceae","Brassicaceae",
-"Araucariaceae","Moraceae","Arecaceae","Rutaceae","Apocynaceae","Musaceae")
-
-for(i in 1:length(search_fam)){
-  ls <- cryo %>% filter(grepl(search_fam[i],families))
-  print(nrow(ls))
-}
-
-##
-### FABACEAE ANALYSIS
-##
-
-
-wfo_fab_acc_sp <- wfo_all %>%
-  filter(family == "Fabaceae") %>%
-  #filter(genus == "Marmaroxylon")
-  filter(taxonomicStatus == "ACCEPTED" | taxonomicStatus == "UNCHECKED") %>%
-  filter(taxonRank == "SPECIES") %>%
-  distinct(scientificName,genus) %>%
-  group_by(genus) %>%
-  count()
-as.data.frame(wfo_fab_acc_sp)
-
-wfo_fab_sp <- wfo_all %>%
-  filter(family == "Fabaceae") %>%
-  filter(taxonRank == "SPECIES") %>%
-  distinct(scientificName,genus,taxonomicStatus) %>%
-  group_by(genus) %>%
-  count(taxonomicStatus) %>%
-  pivot_wider(names_from = taxonomicStatus, values_from = n)
-as.data.frame(wfo_fab_sp)
-
-
-
-
-
-
-
-
-
-
-
-# THE PLANT LIST (TPL)
-
-# read in TPL genera and families
-  # pulled from this list:
-  #   http://www.theplantlist.org/1.1/browse/-/-/
-  #   and formatted into CSV document with col for genus and col for family
-  # read in table
-tpl_gen <- read.csv(file.path(main_dir,"TPL_genera_families_Mar2021.csv"),
-  colClasses = "character")
-str(tpl_gen)
-# replace family name with non-ascii character
-tpl_gen$family[which(tpl_gen$family == "Isoëtaceae")] <- "Isoetaceae"
-
-# MERGE WFO AND TPL
-
-# join WFO and TPL genera and families
-gen_fam <- full_join(wfo_gen,tpl_gen); nrow(gen_fam) #41308
-
-
-
-
-
-#### OLD SECTION for getting manual changes from original version
-###############################################################################
-
-original_version <- read.csv(file.path(main_dir,
-                                       "invitro_cryo_wordsearch_matches_2021-03-12_Original.csv"),
-                             colClasses = "character")
-
-edited_version <- read.csv(file.path(main_dir,
-                                     "invitro_cryo_wordsearch_matches_2021-03-12_AfterManualEdits.csv"),
-                           colClasses = "character")
-
-df_diffs <- diffs(comparedf(original_version, edited_version, by = "uid"))
-unique(df_diffs$var.x)
-
-t1 <- df_diffs %>%
-  filter(var.x == "genus") %>%
-  select(uid,values.y) %>%
-  rename(VPgenus = values.y) %>%
-  mutate_all(na_if,"")
-t2 <- df_diffs %>%
-  filter(var.x == "family") %>%
-  select(uid,values.y) %>%
-  rename(VPfamily = values.y) %>%
-  mutate_all(na_if,"")
-t3 <- df_diffs %>%
-  filter(var.x == "major_group") %>%
-  select(uid,values.y) %>%
-  rename(VPmajor_group = values.y) %>%
-  mutate_all(na_if,"")
-t4 <- df_diffs %>%
-  filter(var.x == "seed_status") %>%
-  select(uid,values.y) %>%
-  rename(VPseed_status = values.y) %>%
-  mutate_all(na_if,"")
-t5 <- df_diffs %>%
-  filter(var.x == "key_category") %>%
-  select(uid,values.y) %>%
-  rename(VPkey_category = values.y) %>%
-  mutate_all(na_if,"")
-t6 <- df_diffs %>%
-  filter(var.x == "cryo_category") %>%
-  select(uid,values.y) %>%
-  rename(VPcryo_category = values.y) %>%
-  mutate_all(na_if,"")
-t7 <- df_diffs %>%
-  filter(var.x == "non_keys") %>%
-  select(uid,values.y) %>%
-  rename(VPnon_capture = values.y) %>%
-  mutate_all(na_if,"")
-t8 <- df_diffs %>%
-  filter(var.x == "nonseed_keys") %>%
-  select(uid,values.y) %>%
-  rename(VPnonseed_capture = values.y) %>%
-  mutate_all(na_if,"")
-
-edits <- list(t1,t2,t3,t4,t5,t6,t7,t8)
-edits_dfs <- lapply(edits,as.data.frame)
-edits_df <- Reduce(full_join,edits_dfs)
-edits_df[is.na(edits_df)] <- ""
-edits_df <- as.data.frame(lapply(edits_df,function(x) gsub(",",";",x)),stringsAsFactors=F)
-head(edits_df)
-
-write.csv(edits_df,file.path(main_dir,
-                             paste0("VP_3-12_edits.csv")), row.names=F)
-
+## author countries - EXCEPTIONAL SPECIES
+hist(map_authctry_excep$Freq,breaks=90,xlim=c(0,300),ylim=c(0,40))
+max(map_authctry_excep$Freq) #252
+# skipping natural breaks since I don't think we are using
+#getJenksBreaks(map_authctry$Freq,9)
+#bins <- c(0,50,100,200,300,500,700,1000,2000,Inf) # natural breaks
+#labels <- c("1 - 49","50 - 99","100 - 199","200 - 299","300 - 499","500 - 699",
+#            "700 - 999","1000 - 1999","2000+")
+bins <- c(0,30,60,90,120,150,180,210,240,Inf) # even breaks
+labels <- c("1 - 29","30 - 59","60 - 89","90 - 119","120 - 149",
+            "150 - 179","180 - 209","210 - 239","240+")
+palette_ctry <- colorBin(palette = "RdPu", bins = bins,
+                         domain = map_authctry_excep$Freq, reverse = F, 
+                         na.color = "white")
+legend <- paste0("Number of articles","<br/>",
+                 "on exceptional species","<br/>",
+                 "with at least one author's","<br/>",
+                 "institution in the country")
+map_heat_authctry_excep <- map.countries(map_authctry_excep,palette_ctry,legend,labels)
+map_heat_authctry_excep
+#htmlwidgets::saveWidget(file.path(map_heat_authctry_excep,"AuthorCountriesExceptional_map.html"))
