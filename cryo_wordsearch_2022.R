@@ -1,14 +1,18 @@
 ################################################################################
 ### Author: Emily Beckman Bruns
-### Last Update: 3/18/2022
+### Last Update: 18 March 2022
 
 ### Funding: Institute of Museum and Library Services
 #            grant number MG-30-17-0055-17
-#            Awarded to Cincinnati Zoo & Botanical Garden
+#            Awarded to Cincinnati Zoo & Botanical Garden, Valerie Pence
 
 ### DESCRIPTION:
   # Word search analysis of Web of Science data, searching for family, genus,
-  #  and keywords related to cryopreservation and in vitro propagation.
+  #   and keywords related to cryopreservation.
+  # Results published in:
+  #   Pence VC, Bruns EB. The Tip of the Iceberg: Cryopreservation Needs for 
+  #   Meeting the Challenge of Exceptional Plant Conservation. Plants. 2022; 
+  #   11(12):1528. https://doi.org/10.3390/plants11121528
 
 ### INPUTS:
   # Exports from Web of Science (Excel files)
