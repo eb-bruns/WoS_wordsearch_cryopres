@@ -21,7 +21,8 @@
   #     (Keyword searches - focus_check.csv)
   # World Flora Online static backbone v.2021.01
   #   http://www.worldfloraonline.org/downloadData
-  # Exceptional Status List (Pence et al. 2022)
+  # Exceptional Status List (Pence et al. 2022) 
+  #   available in GitHub repository: "Exceptional Status List - No Justification.csv"
   #   https://cincinnatizoo.org/system/assets/uploads/2022/02/Supplementary-data.xlsx
   # Seed/non-seed and higher classification from The Plant List and manual
   #  searching (available in GitHub repository: "seed_nonseed_families.csv")
