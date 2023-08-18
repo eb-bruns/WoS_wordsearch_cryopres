@@ -1,7 +1,7 @@
 Word search analysis of Web of Science (WoS) data, searching for family, genus, and keywords related to cryopreservation.
 
 Results published in ~
-### Pence VC, Bruns EB. The Tip of the Iceberg: Cryopreservation Needs for Meeting the Challenge of Exceptional Plant Conservation. Plants. 2022; 11(12):1528. https://doi.org/10.3390/plants11121528
+### Pence VC, Bruns EB. 2022. The Tip of the Iceberg: Cryopreservation Needs for Meeting the Challenge of Exceptional Plant Conservation. *Plants 11*(12):1528. https://doi.org/10.3390/plants11121528
 
 Funding provided by the Institute of Museum and Library Services, grant number MG-30-17-0055-17 Awarded to Cincinnati Zoo & Botanical Garden
 
