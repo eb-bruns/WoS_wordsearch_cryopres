@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Bruns"
+  given-names: "Emily Beckman"
+  orcid: "https://orcid.org/0000-0002-2250-554X"
+title: "Wos_wordsearch_cryopres"
+version: 1.0.0
+url: "https://github.com/eb-bruns/WoS_wordsearch_cryopres"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Pence"
+    given-names: "Valerie C"
+    orcid: "https://orcid.org/0000-0003-2299-2437"
+  - family-names: "Bruns"
+    given-names: "Emily Beckman"
+    orcid: "https://orcid.org/0000-0002-2250-554X"
+  doi: "10.3390/plants11121528"
+  journal: "Plants"
+  month: 6
+  start: 1528
+  title: "The Tip of the Iceberg: Cryopreservation Needs for Meeting the Challenge of Exceptional Plant Conservation"
+  issue: 12
+  volume: 11
+  year: 2022
